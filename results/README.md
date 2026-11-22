@@ -30,3 +30,21 @@ Model referencyjny (odczytany z danych, reszta dopasowania ~1e-8): ψ = ½·E·�
 
 Względny błąd RMSE (zbiór testowy, 1 krok): Δε_pl 1.8%, ψ 0.9%, σ 1.8%, D 0.9%.
 Wykres: `identified_params.png`; pełne dane: `identified_params.json`; wagi: `tann_weights.pt`.
+
+### Wpływ liczby ścieżek treningowych (10% vs 50%)
+
+```bash
+cd PyTorch_TANN && python identify_params.py --train-frac 0.5 --save ../results/tann_weights_50pct.pt --out ../results/identified_params_50pct.json
+```
+
+| Parametr | Referencja | TANN 10% (2 ścieżki) | TANN 50% (10 ścieżek) |
+|---|---|---|---|
+| E – mediana ∂²ψ/∂ε² (wszystkie stany) | 200 000 | 174 400 (−12.8%) | 198 100 (−0.9%) |
+| E – zakres 5–95% | 200 000 | 155 500 – 214 600 | 191 300 – 202 400 |
+| S (naprężenie graniczne) | 141.42 | 140.27 | 141.40 |
+| Rp0.05 | 109.1 | 117.9 | 109.9 |
+| Rp0.2 | 138.3 | 137.8 | 138.2 |
+| σ przy ε = 0.6% | 141.39 | 138.26 | 141.14 |
+| RMSE σ (test) | – | 1.85% | 0.14% |
+
+Wykres: `E_comparison_10_vs_50pct.png`.
