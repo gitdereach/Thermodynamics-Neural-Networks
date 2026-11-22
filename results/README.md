@@ -48,3 +48,22 @@ cd PyTorch_TANN && python identify_params.py --train-frac 0.5 --save ../results/
 | RMSE σ (test) | – | 1.85% | 0.14% |
 
 Wykres: `E_comparison_10_vs_50pct.png`.
+
+## Odkrywanie zmiennej wewnętrznej z samych danych ε–σ (`PyTorch_TANN/discover_internal_var.py`)
+
+Do treningu użyto **wyłącznie odkształcenia i naprężenia** (10 ścieżek). Model: ψ = Ψ(ε, z), σ = ∂ψ/∂ε,
+dz = |dε|·F(ε, z, sgn dε), z(0) = 0; strata = błąd σ wzdłuż całej ścieżki + kara za ujemną dyssypację D = −∂ψ/∂z·dz.
+Trening: 1500 epok, ~55 min CPU. Ocena na 5 niewidzianych ścieżkach, z w pełni rekurencyjnej predykcji (sieć sama
+całkuje z od zera).
+
+| Wynik | Wartość |
+|---|---|
+| błąd σ (RMSE, cała ścieżka) | 0.33% |
+| odkryta z vs prawdziwe ε_pl | liniowo, R² = 0.9997 |
+| E (mediana ∂²ψ/∂ε²) | 181 700 (ref. 200 000, −9%) |
+| S | 141.77 (ref. 141.42) |
+| Rp0.05 / Rp0.2 | 111.3 / 138.4 (ref. 109.1 / 138.3) |
+| dyssypacja (nieuczona) | błąd 4%, 3% punktów lekko ujemnych |
+| energia ψ (nieuczona) | błąd 18% – nieidentyfikowalna z samych σ–ε |
+
+Wykres: `discover_internal_var.png`; liczby: `discover_internal_var.json`; wagi: `discover_weights.pt`.
