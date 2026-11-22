@@ -86,9 +86,9 @@ def load_data(path):
     return d
 
 
-def split(d):
+def split(d, train_frac=0.1):
     n = d['e_t'].shape[0]
-    ntrain = int(round(n * 0.1)); nval = int(round(n * 0.45))
+    ntrain = int(round(n * train_frac)); nval = int(round(n * 0.5 * (1. - train_frac)))
     tv = {k: v[:ntrain + nval] for k, v in d.items()}
     test = {k: v[ntrain + nval:] for k, v in d.items()}
     return tv, test, ntrain
@@ -132,13 +132,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--data', default='./data_1D_hypo_500real')
     ap.add_argument('--niters', type=int, default=5000)
+    ap.add_argument('--train-frac', type=float, default=0.1, help='fraction of loading paths used for training')
     ap.add_argument('--load', default=None)
     ap.add_argument('--save', default='../results/tann_weights.pt')
     ap.add_argument('--out', default='../results/identified_params.json')
     args = ap.parse_args()
 
     d = load_data(args.data)
-    tv, test, ntrain = split(d)
+    tv, test, ntrain = split(d, args.train_frac)
+    print(f'training paths: {ntrain}, test paths: {test["e_t"].shape[0]}')
     prm = {'e': get_prm(tv['e_tdt']), 'de': get_prm(tv['de']), 's': get_prm(tv['s_tdt']),
            'z': get_prm(tv['p_tdt']), 'dz': get_prm(tv['dp']), 'f': get_prm(tv['psi_tdt']), 'd': get_prm(tv['D'])}
     model = TANN(prm)
@@ -153,14 +155,15 @@ def main():
     E_ref = float(np.median(f('s_tdt')[np.abs(f('eel_tdt')) > 1e-6] / f('eel_tdt')[np.abs(f('eel_tdt')) > 1e-6]))
     S_ref = fit_S_exact(f('de'), f('s_t'), f('s_tdt'), E_ref)
 
-    # ---------------- TANN: stiffness from Hessian of psi on test states ----------------
-    eps = test['e_tdt'].reshape(-1, 1).clone().requires_grad_(True)
-    pl = test['p_tdt'].reshape(-1, 1).clone().requires_grad_(True)
+    # ---------------- TANN: stiffness from Hessian of psi on all data states ----------------
+    eps = d['e_tdt'].reshape(-1, 1).clone().requires_grad_(True)
+    pl = d['p_tdt'].reshape(-1, 1).clone().requires_grad_(True)
     psi = model.psi(eps, pl)
     sig, dpsi_dpl = torch.autograd.grad(psi, (eps, pl), torch.ones_like(psi), create_graph=True)
     H_ee, H_ep = torch.autograd.grad(sig, (eps, pl), torch.ones_like(sig))
     H_ee, H_ep = H_ee.numpy().ravel(), H_ep.numpy().ravel()
     E_nn = float(np.median(H_ee))
+    E_mean = float(np.mean(H_ee))
 
     # ---------------- TANN: one-step predictions on test set ----------------
     with torch.enable_grad():
@@ -184,10 +187,11 @@ def main():
     sig_ref = S_ref * (1 - np.exp(-E_ref * eps_m / S_ref))
 
     res = {
+        'train_frac': args.train_frac, 'n_train_paths': ntrain,
         'reference': {'E': E_ref, 'S_limit_stress': S_ref,
                       'Rp0.05': offset_yield(eps_m, sig_ref, E_ref, 5e-4), 'Rp0.2': offset_yield(eps_m, sig_ref, E_ref, 2e-3),
                       'sigma_at_eps_max': float(sig_ref[-1])},
-        'TANN': {'E_d2psi_deps2_median': E_nn, 'E_p5_p95': [float(np.percentile(H_ee, 5)), float(np.percentile(H_ee, 95))],
+        'TANN': {'E_d2psi_deps2_median': E_nn, 'E_d2psi_deps2_mean': E_mean, 'E_p5_p95': [float(np.percentile(H_ee, 5)), float(np.percentile(H_ee, 95))],
                  'minus_d2psi_deps_dpl_median': float(np.median(-H_ep)),
                  'S_limit_stress_from_flow_rule': float(S_nn),
                  'Rp0.05': offset_yield(eps_m, sig_nn, E_nn, 5e-4), 'Rp0.2': offset_yield(eps_m, sig_nn, E_nn, 2e-3),
@@ -197,7 +201,7 @@ def main():
     }
     with open(args.out, 'w') as fo:
         json.dump(res, fo, indent=1)
-    print(json.dumps({k: res[k] for k in ('reference', 'TANN')}, indent=1))
+    print(json.dumps({k: res[k] for k in ('train_frac', 'reference', 'TANN')}, indent=1))
 
 
 if __name__ == '__main__':
